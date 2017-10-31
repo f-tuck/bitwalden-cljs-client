@@ -106,7 +106,7 @@
   (b58/encode (.-publicKey keypair)))
 
 (defn keypair-from-seed-phrase [seed-phrase]
-  "Hashes a phrase and then uses the 1st half of the hash as input to nacl keypair generator."
+  "Deterministic keypair from the first half of the hash of a phrase."
   (-> seed-phrase
       (string-to-uint8array)
       (nacl.hash)
@@ -114,7 +114,7 @@
       (nacl.sign.keyPair.fromSeed)))
 
 (defn keypair-from-seed-b58 [seed-b58]
-  ""
+  "Deterministic keypair from a b58 encoded 32 byte seed."
   (-> seed-b58
       (b58/decode)
       (.slice 0 32)
@@ -170,7 +170,5 @@
   
   )
 
-; get peers
-; adding/editing scrypt password
-; load-or-create keys
+; add post
 
