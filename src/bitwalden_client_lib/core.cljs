@@ -1,6 +1,6 @@
 (ns bitwalden-client-lib.core
   (:require
-    [cljs.core.async :refer [chan put!]]
+    [cljs.core.async :refer [chan put! <!]]
     [ajax.core :refer [GET POST]]
     [cljsjs.nacl-fast :as nacl]
     [alphabase.base58 :as b58]
@@ -50,7 +50,6 @@
 (defn dht-compute-sig [keypair params]
   (let [params-encoded (js/Bencode.encode (clj->js params))
         sig-unit (.substring params-encoded 1 (- (.-length params-encoded) 1))]
-    (print "sig unit" sig-unit)
     (hexenate (nacl.sign.detached (string-to-uint8array sig-unit) (.-secretKey keypair)))))
 
 (defn keys-from-secret [secret]
@@ -126,8 +125,7 @@
   "Fetch account's profile data. Asyncrhonous."
   [node public-key-base58 & [callback]]
   (go
-    (let [[err response] (<! (<json-rpc node "dht-get" {:infohash (dht-address public-key-base58 profile-namespace)}))
-          result (vec (concat [err] (if response [(js/Bencode.decode (response "v")) (response "seq")] [nil])))]
+    (let [result (<! (<json-rpc node "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace)}))]
       (if callback (apply callback result))
       result)))
 
@@ -145,11 +143,10 @@
         ["Profile data too large." nil]
         ; generate signed packet
         (let [; get previous value
-              [err response] (<! (<json-rpc node "dht-get" {:infohash (dht-address public-key-base58 profile-namespace)}))
+              [err response] (<! (<json-rpc node "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace)}))
               dht-params {:v datastructure-bencoded :seq (if response (inc (response "seq")) 1) :salt profile-namespace}
               sig (dht-compute-sig keypair dht-params)
               post-data (merge dht-params {:k public-key-base58 :s.dht sig})
-              _ (print "post data" post-data)
               ; post to nodes
               response (<! (<json-rpc node "dht-put" post-data))
               [err dht-hash node-count] response]
@@ -157,18 +154,46 @@
           response)))))
 
 ; fetch content
+; (go (let [c (content-fetch "http://45.32.253.186:8923" "448c6cc0e816408859ba8753705c2b2264548fdf")]
+;      (loop []
+;        (let [r (<! c)]
+;          (print "got" r)
+;          (if r
+;            (recur))))))
 (defn content-fetch
   "Fetch some content by hash. Asynchronous."
-  [nodes infohash callback]
-  
-  )
+  [node infohash & [callback]]
+  (let [uid (hexenate (nacl.randomBytes 8))
+        c (chan)]
+    (print uid c)
+    (let [new-uid (<! (<json-rpc node "torrent-fetch" {:infohash infohash :u uid}))]
+      (print new-uid)
+      (if new-uid
+        (print "new-uid" new-uid)
+        (loop [after 0]
+          (let [update (<! (<json-rpc node "get-queue" {:u new-uid :after after}))
+                latest-timestamp (apply js/Math.max (map #(get % "timestamp") update))]
+            (print update)
+            (for [u update]
+              (if callback
+                (callback nil (u "payload"))
+                (put! c [nil (u "payload")])))
+            (when update (recur latest-timestamp)))))
+      (if callback (callback nil new-uid))
+      (put! c [nil new-uid]))
+    c))
 
 ; store content
+; (go (print (<! (content-store "http://localhost:8923" "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM.json" (js/JSON.stringify (clj->js {:version "https://jsonfeed.org/version/1" :title "Testing" :items []}))))))
 (defn content-store
   "Store some content. Returns the hash. Asynchronous."
-  [nodes content-name content callback]
-  
-  )
+  [node content-name content & [callback]]
+  (go
+    (let [[err infohash] (<! (<json-rpc node "torrent-seed" {:name content-name :content content}))]
+      (if callback (callback err infohash))
+      [err infohash])))
+
+; get posts
 
 ; add post
 
