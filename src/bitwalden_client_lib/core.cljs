@@ -44,6 +44,9 @@
     (.update sha1 (join-uint8arrays (b58/decode public-key-b58) (string-to-uint8array salt)))
     (hexenate (.digest sha1))))
 
+(defn magnet-link [infohash & [filename]]
+  (str "magnet:?xt=urn:btih:" infohash (if filename (str "&dn=" filename))))
+
 (defn dht-compute-sig [keypair params]
   (let [params-encoded (js/Bencode.encode (clj->js params))
         sig-unit (.substring params-encoded 1 (- (.-length params-encoded) 1))]
