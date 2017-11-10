@@ -149,7 +149,7 @@
 ; fetch account profile
 ; (go (print (<! (profile-fetch node keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM"))))
 (defn profile-fetch
-  "Fetch account's profile data. Asyncrhonous."
+  "Fetch account's profile data. Asynchronous."
   [node keypair public-key-base58 & [callback]]
   (go
     (let [result (<! (<json-rpc node keypair "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace) :salt profile-namespace}))]
