@@ -152,7 +152,7 @@
   "Fetch account's profile data. Asyncrhonous."
   [node keypair public-key-base58 & [callback]]
   (go
-    (let [result (<! (<json-rpc node keypair "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace)}))]
+    (let [result (<! (<json-rpc node keypair "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace) :salt profile-namespace}))]
       (if callback (apply callback result))
       result)))
 
@@ -170,14 +170,14 @@
         ["Profile data too large." nil]
         ; generate signed packet
         (let [; get previous value
-              [err response] (<! (<json-rpc node keypair "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace)}))
-              dht-params {:v datastructure-bencoded :seq (if response (inc (response "seq")) 1) :salt profile-namespace}
+              dht-get-params {:addresshash (dht-address public-key-base58 profile-namespace) :salt profile-namespace}
+              result (<! (<json-rpc node keypair "dht-get" dht-get-params))
+              dht-params {:v datastructure-bencoded :seq (if result (inc (result "seq")) 1) :salt profile-namespace}
               sig (dht-compute-sig keypair dht-params)
               post-data (merge dht-params {:k public-key-base58 :s.dht sig})
               ; post to nodes
-              response (<! (<json-rpc node keypair "dht-put" post-data))
-              [err dht-hash node-count] response]
-          (if callback (callback err dht-hash node-count))
+              response (<! (<json-rpc node keypair "dht-put" post-data))]
+          (if callback (callback response))
           response)))))
 
 ; fetch content
