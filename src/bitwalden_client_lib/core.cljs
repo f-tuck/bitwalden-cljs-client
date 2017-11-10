@@ -167,7 +167,7 @@
           datastructure-bencoded (js/Bencode.encode (clj->js datastructure))]
       ; check size < 1000 bytes
       (if (>= (.-length datastructure-bencoded) 1000)
-        ["Profile data too large." nil]
+        {:error true :message "Profile data too large." :code 400}
         ; generate signed packet
         (let [; get previous value
               dht-get-params {:addresshash (dht-address public-key-base58 profile-namespace) :salt profile-namespace}
