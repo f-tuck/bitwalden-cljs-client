@@ -113,6 +113,7 @@
       (when (= (first known-nodes) :ok)
         (vec (remove #(= % "") (.split (second known-nodes) "\n")))))))
 
+; (go (def nodes (<! (refresh-known-nodes))))
 (defn refresh-known-nodes [& [known-nodes callback]]
   (go
     ; if we have no known nodes load known-nodes.txt from the server
