@@ -123,13 +123,11 @@
         (vec (remove #(= % "") (.split (second known-nodes) "\n")))))))
 
 ; (go (def nodes (<! (refresh-known-nodes))))
-(defn refresh-known-nodes [& [known-nodes callback]]
+(defn refresh-known-nodes [& [known-nodes]]
   (go
     ; if we have no known nodes load known-nodes.txt from the server
-    (let [known-nodes (if (= (count known-nodes) 0) (<! (fetch-known-nodes)) known-nodes)]
-      ; TODO: loop through random subset of known nodes querying their peer list
-      (if callback (callback known-nodes))
-      known-nodes)))
+    ; TODO: loop through random subset of known nodes querying their peer list
+    (if (= (count known-nodes) 0) (<! (fetch-known-nodes)) known-nodes)))
 
 ; --- API calls --- ;
 
@@ -159,17 +157,14 @@
 ; (go (print (<! (profile-fetch node keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM"))))
 (defn profile-fetch
   "Fetch account's profile data. Asynchronous."
-  [node keypair public-key-base58 & [callback]]
-  (go
-    (let [result (<! (<json-rpc node keypair "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace) :salt profile-namespace}))]
-      (if callback (apply callback result))
-      result)))
+  [node keypair public-key-base58]
+  (<json-rpc node keypair "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace) :salt profile-namespace}))
 
 ; update account profile
 ; (go (print (<! (profile-update node keypair {:name "Test face" :email "tester@test.com"}))))
 (defn profile-update
   "Update account's profile data. Asynchronous."
-  [node keypair datastructure & [callback]]
+  [node keypair datastructure]
   (go
     ; bencode datastructure
     (let [public-key-base58 (public-key-b58-from-keypair keypair)
@@ -186,7 +181,6 @@
               post-data (merge dht-params {:k public-key-base58 :s.dht sig})
               ; post to nodes
               response (<! (<json-rpc node keypair "dht-put" post-data))]
-          (if callback (callback response))
           response)))))
 
 ; fetch content
@@ -198,22 +192,19 @@
 ;            (recur))))))
 (defn content-fetch-from-magnet
   "Fetch some content by hash. Asynchronous."
-  [node keypair infohash & [callback]]
+  [node keypair infohash]
   (let [uid (hexenate (nacl.randomBytes 8))
         c (chan)]
     (go
       (let [new-uid (<! (<json-rpc node keypair "torrent-fetch" {:infohash infohash :u uid}))]
         (when new-uid
-          (if callback (callback new-uid))
           (put! c {"uid" new-uid})
           (loop [after 0]
             (let [update (<! (<json-rpc node keypair "get-queue" {:u new-uid :after after}))
                   latest-timestamp (apply js/Math.max (map #(get % "timestamp") update))
                   files (some identity (doall (for [u update]
                                                 (do
-                                                  (if callback
-                                                    (callback (u "payload"))
-                                                    (put! c (assoc (u "payload") "uid" new-uid "timestamp" (u "timestamp"))))
+                                                  (put! c (assoc (u "payload") "uid" new-uid "timestamp" (u "timestamp")))
                                                   (when (= (get-in u ["payload" "download"]) "done")
                                                     (get-in u ["payload" "files"]))))))
                   done? (or (not update) files)]
@@ -251,7 +242,7 @@
 ; (go (print (<! (content-store (nodes 0) keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM.json" (js/JSON.stringify (clj->js {:version "https://jsonfeed.org/version/1" :title "Testing" :items [1 2 3 "wingwang"]}))))))
 (defn content-store
   "Store some content. Returns the hash. Asynchronous."
-  [node keypair content-name content & [callback]]
+  [node keypair content-name content]
   (<json-rpc node keypair "torrent-seed" {:name content-name :content content}))
 
 ; get posts
