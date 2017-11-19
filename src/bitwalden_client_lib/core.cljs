@@ -1,6 +1,6 @@
 (ns bitwalden-client-lib.core
   (:require
-    [cljs.core.async :refer [chan put! <!]]
+    [cljs.core.async :refer [chan put! <! close!]]
     [ajax.core :refer [GET POST]]
     [cljsjs.nacl-fast :as nacl]
     [alphabase.base58 :as b58]
@@ -14,10 +14,12 @@
 
 ; test params
 ; (def node "http://localhost:8923")
+; (go (def nodes (<! (refresh-known-nodes))))
+; (def node (get nodes 1))
 ; (def keypair (keypair-from-seed-b58 "H33xgBQj5jTU6bKC5iw6B9docquvNpDeKoSSWkCpcU58"))
 ; (def pubkey (public-key-b58-from-keypair keypair))
 
-; -- utils --- ;
+; --- utils --- ;
 
 (defn with-timestamp [params]
   (assoc params :t (.getTime (js/Date.))))
@@ -45,8 +47,15 @@
     (.update sha1 (join-uint8arrays (b58/decode public-key-b58) (string-to-uint8array salt)))
     (hexenate (.digest sha1))))
 
+(def magnet-prefix "magnet:?xt=urn:btih:")
+
 (defn magnet-link [infohash & [filename]]
-  (str "magnet:?xt=urn:btih:" infohash (if filename (str "&dn=" filename))))
+  (str magnet-prefix infohash (if filename (str "&dn=" filename))))
+
+(defn magnet-get-infohash [url]
+  (let [re #"(?i)\bmagnet:.xt=urn:btih:([A-F\d]+)\b"
+        m (.exec re url)]
+    (and m (.toLowerCase (get m 1)))))
 
 ; --- key management --- ;
 
@@ -118,7 +127,7 @@
   (go
     ; if we have no known nodes load known-nodes.txt from the server
     (let [known-nodes (if (= (count known-nodes) 0) (<! (fetch-known-nodes)) known-nodes)]
-      ; TODO: loop through subset of known nodes querying their peer list
+      ; TODO: loop through random subset of known nodes querying their peer list
       (if callback (callback known-nodes))
       known-nodes)))
 
@@ -187,38 +196,63 @@
 ;          (print "got" r)
 ;          (if r
 ;            (recur))))))
-(defn content-fetch
+(defn content-fetch-from-magnet
   "Fetch some content by hash. Asynchronous."
   [node keypair infohash & [callback]]
   (let [uid (hexenate (nacl.randomBytes 8))
         c (chan)]
-    (print uid c)
-    (let [new-uid (<! (<json-rpc node keypair "torrent-fetch" {:infohash infohash :u uid}))]
-      (print new-uid)
-      (if new-uid
-        (print "new-uid" new-uid)
-        (loop [after 0]
-          (let [update (<! (<json-rpc node keypair "get-queue" {:u new-uid :after after}))
-                latest-timestamp (apply js/Math.max (map #(get % "timestamp") update))]
-            (print update)
-            (for [u update]
-              (if callback
-                (callback nil (u "payload"))
-                (put! c [nil (u "payload")])))
-            (when update (recur latest-timestamp)))))
-      (if callback (callback nil new-uid))
-      (put! c [nil new-uid]))
+    (go
+      (let [new-uid (<! (<json-rpc node keypair "torrent-fetch" {:infohash infohash :u uid}))]
+        (when new-uid
+          (if callback (callback new-uid))
+          (put! c {"uid" new-uid})
+          (loop [after 0]
+            (let [update (<! (<json-rpc node keypair "get-queue" {:u new-uid :after after}))
+                  latest-timestamp (apply js/Math.max (map #(get % "timestamp") update))
+                  files (some identity (doall (for [u update]
+                                                (do
+                                                  (if callback
+                                                    (callback (u "payload"))
+                                                    (put! c (assoc (u "payload") "uid" new-uid "timestamp" (u "timestamp"))))
+                                                  (when (= (get-in u ["payload" "download"]) "done")
+                                                    (get-in u ["payload" "files"]))))))
+                  done? (or (not update) files)]
+              (if done?
+                (do
+                  (when files
+                    (put! c {"uid" new-uid "url" (str node "/bw/content/" infohash "/" (get-in files [0 "path"]))}))
+                  (close! c))
+                (recur latest-timestamp)))))))
     c))
 
+(defn content-fetch-magnet-url
+  "Wait for the remote download of content to finish and return the URL."
+  [node keypair infohash]
+  (go (let [c (content-fetch-from-magnet node keypair infohash)]
+        (loop [url nil]
+          (let [r (<! c)
+                new-url (or url (r "url"))]
+            (if r
+              (recur new-url)
+              new-url))))))
+
+; (go (print (get-in (<! (content-get (get nodes 1) keypair "magnet:?xt=urn:btih:9071384156b7d415fa0a1a0dd2f08d0793022c9a")) ["content" "items"])))
+(defn content-get
+  "Get remote content by URL."
+  [node keypair url]
+  (go
+    (let [actual-url (if (= (.indexOf url magnet-prefix) 0) (<! (content-fetch-magnet-url node keypair (magnet-get-infohash url))) url)
+          [code response] (<! (<api :get actual-url))]
+      (if (and (= code :ok) response)
+        {"content" response}
+        {:error true :message (str "Problem downloading " url) :code 400}))))
+
 ; store content
-; (go (print (<! (content-store node keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM.json" (js/JSON.stringify (clj->js {:version "https://jsonfeed.org/version/1" :title "Testing" :items []}))))))
+; (go (print (<! (content-store (nodes 0) keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM.json" (js/JSON.stringify (clj->js {:version "https://jsonfeed.org/version/1" :title "Testing" :items [1 2 3 "wingwang"]}))))))
 (defn content-store
   "Store some content. Returns the hash. Asynchronous."
   [node keypair content-name content & [callback]]
-  (go
-    (let [[err infohash] (<! (<json-rpc node keypair "torrent-seed" {:name content-name :content content}))]
-      (if callback (callback err infohash))
-      [err infohash])))
+  (<json-rpc node keypair "torrent-seed" {:name content-name :content content}))
 
 ; get posts
 ; add post
