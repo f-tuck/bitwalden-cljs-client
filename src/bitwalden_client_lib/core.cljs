@@ -3,8 +3,9 @@
     [cljs.core.async :refer [chan put! <! close!]]
     [bencode :as bencode]
     [bitwalden-client-lib.crypto :refer [public-key-b58-from-keypair keypair-from-seed-b58 dht-compute-sig]]
-    [bitwalden-client-lib.util :refer [random-hex dht-address is-magnet-url magnet-get-infohash]]
-    [bitwalden-client-lib.rpc :refer [<api <json-rpc refresh-known-nodes]])
+    [bitwalden-client-lib.util :refer [random-hex dht-address is-magnet-url magnet-get-infohash magnet-link]]
+    [bitwalden-client-lib.rpc :refer [<api <json-rpc refresh-known-nodes]]
+    [bitwalden-client-lib.data :refer [make-profile make-json-feed make-post]])
   (:require-macros
     [cljs.core.async.macros :refer [go]]))
 
@@ -134,5 +135,36 @@
   (<json-rpc node keypair "torrent-seed" {:name content-name :content content}))
 
 ; get posts
+(defn refresh-account [node keypair public-key-base58]
+  (go
+    (let [profile (<! (profile-fetch node keypair public-key-base58))
+          profile-data (and (profile "v") (js->clj (js/Bencode.decode (profile "v"))))]
+      (if (not= (profile-data "public-key-base58") public-key-base58)
+        {:error true :message "Public key did not match." :code 400}
+        (let [feed-url (profile-data "feed")
+              feed (if feed-url (<! (content-get node keypair feed-url)))]
+          {:profile profile-data :feed (if (feed :error) nil feed)})))))
+
 ; add post
+(defn add-post [node keypair post & [profile posts-feed]]
+  (go
+    (let [public-key-b58 (public-key-b58-from-keypair keypair)
+          profile (or profile (make-profile public-key-b58))
+          posts-feed (or posts-feed (make-json-feed public-key-b58))
+          posts-feed (update-in posts-feed ["items"] #(into [post] %))
+          blob (js/JSON.stringify (clj->js posts-feed))
+          ; {infohash ...}
+          updated-feed (<! (content-store node keypair (str public-key-b58 ".json") blob))
+          infohash (updated-feed "infohash")]
+      (if infohash
+        (let [magnet-link (magnet-link infohash)
+              profile (assoc profile "feed" magnet-link)
+              ; {addresshash ... nodecount ...}
+              update-response (<! (profile-update node keypair profile))]
+          (if (update-response :error)
+            update-response
+            (if (and (> (update-response "nodecount") 0) (update-response "addresshash"))
+              {:profile profile :feed posts-feed}
+              update-response)))
+        updated-feed))))
 
