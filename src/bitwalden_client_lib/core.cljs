@@ -1,13 +1,16 @@
 (ns bitwalden-client-lib.core
   (:require
     [cljs.core.async :refer [chan put! <! close!]]
-    [bencode :as bencode]
+    [bitwalden-client-lib.buffershim :as buffershim]
+    ["dht-bencode/lib/bencode" :as bencode]
     [bitwalden-client-lib.crypto :refer [public-key-b58-from-keypair keypair-from-seed-b58 dht-compute-sig]]
     [bitwalden-client-lib.util :refer [random-hex dht-address is-magnet-url magnet-get-infohash magnet-link]]
     [bitwalden-client-lib.rpc :refer [<api <json-rpc refresh-known-nodes]]
     [bitwalden-client-lib.data :refer [make-profile make-json-feed make-post]])
   (:require-macros
     [cljs.core.async.macros :refer [go]]))
+
+(buffershim/do-shim-buffer)
 
 (def profile-namespace "bw.profile")
 
@@ -57,7 +60,7 @@
   (go
     ; bencode datastructure
     (let [public-key-base58 (public-key-b58-from-keypair keypair)
-          datastructure-bencoded (js/Bencode.encode (clj->js datastructure))]
+          datastructure-bencoded (.toString (bencode/bencode (clj->js datastructure)))]
       ; check size < 1000 bytes
       (if (>= (.-length datastructure-bencoded) 1000)
         {:error true :message "Profile data too large." :code 400}
@@ -139,8 +142,9 @@
 (defn refresh-account [node keypair public-key-base58]
   (go
     (let [profile (<! (profile-fetch node keypair public-key-base58))
-          profile-data (and (profile "v") (js->clj (js/Bencode.decode (profile "v"))))]
-      (if (not= (profile-data "public-key-base58") public-key-base58)
+          profile-data (if (profile "v") (into {} (doall (map (fn [[k v]] [k (if v (.toString v))]) (js->clj (bencode/bdecode (profile "v")))))))]
+      ; TODO: verify stored sig in "s.dht" field
+      (if (not= (profile-data "pk") public-key-base58)
         {:error true :message "Public key did not match." :code 400}
         (let [feed-url (profile-data "feed")
               feed (if feed-url (<! (content-get node keypair feed-url)))]

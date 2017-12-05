@@ -35,11 +35,12 @@
                          :output-to "public/js/app.js"
                          :output-dir "public/js/out"
                          :asset-path   "js/out"
+                         :install-deps true
+                         :npm-deps {:buffer "5.0.8"
+                                    :dht-bencode "0.1.2"}
                          :source-map true
                          :optimizations :none
-                         :pretty-print  true
-                         :foreign-libs [{:file "https://raw.githubusercontent.com/benjreinhart/bencode-js/3ca25e431354850d59fa820ef6b27f5fa93dd458/bencode-min.js"
-                                         :provides ["bencode"]}]}
+                         :pretty-print true}
                         :figwheel
                         {:on-jsload "bitwalden-client-lib.ui/mount-root"}}
                        :release
@@ -48,6 +49,9 @@
                         {:output-to "public/js/app.js"
                          :output-dir "public/js/release"
                          :asset-path   "js/out"
+                         :install-deps true
+                         :npm-deps {:buffer "5.0.8"
+                                    :dht-bencode "0.1.2"}
                          :optimizations :advanced
                          :pretty-print false}}}}
 

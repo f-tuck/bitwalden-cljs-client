@@ -1,7 +1,11 @@
 (ns bitwalden-client-lib.crypto
   (:require [alphabase.base58 :as b58]
             [cljsjs.nacl-fast :as nacl]
+            [bitwalden-client-lib.buffershim :as buffershim]
+            ["dht-bencode/lib/bencode" :as bencode]
             [bitwalden-client-lib.util :refer [string-to-uint8array hexenate]]))
+
+(buffershim/do-shim-buffer)
 
 ; --- key management --- ;
 
@@ -36,15 +40,18 @@
       (.slice 0 32)
       (nacl.sign.keyPair.fromSeed)))
 
+(defn generate-keypair-seed-b58 []
+  (b58/encode (nacl.randomBytes 32)))
+
 ; --- crypto helpers --- ;
 
 (defn dht-compute-sig [keypair params]
-  (let [params-encoded (js/Bencode.encode (clj->js params))
-        sig-unit (.substring params-encoded 1 (- (.-length params-encoded) 1))]
-    (hexenate (nacl.sign.detached (string-to-uint8array sig-unit) (.-secretKey keypair)))))
+  (let [params-encoded (js/Uint8Array. (bencode/bencode (clj->js params)))
+        sig-unit (.slice params-encoded 1 (- (.-length params-encoded) 1))]
+    (hexenate (nacl.sign.detached sig-unit (.-secretKey keypair)))))
 
 (defn with-signature [keypair params]
-  (let [params-encoded (js/Bencode.encode (clj->js params))
-        signature (hexenate (nacl.sign.detached (string-to-uint8array params-encoded) (.-secretKey keypair)))]
+  (let [params-encoded (js/Uint8Array. (bencode/bencode (clj->js params)))
+        signature (hexenate (nacl.sign.detached params-encoded (.-secretKey keypair)))]
     (assoc params :s signature)))
 
