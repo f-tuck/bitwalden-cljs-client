@@ -50,8 +50,8 @@
   (<json-rpc node keypair "dht-get" {:addresshash (dht-address public-key-base58 profile-namespace) :salt profile-namespace}))
 
 ; update account profile
-; (go (print (<! (profile-update (nodes 0) keypair {:name "Test face" :email "tester@test.com"}))))
-(defn profile-update
+; (go (print (<! (profile-update! (nodes 0) keypair {:name "Test face" :email "tester@test.com"}))))
+(defn profile-update!
   "Update account's profile data. Asynchronous."
   [node keypair datastructure]
   (go
@@ -128,13 +128,14 @@
         {:error true :message (str "Problem downloading " url) :code 400 :error-response response}))))
 
 ; store content
-; (go (print (<! (content-store (nodes 0) keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM.json" (js/JSON.stringify (clj->js {:version "https://jsonfeed.org/version/1" :title "Testing" :items [1 2 3 "wingwang"]}))))))
-(defn content-store
+; (go (print (<! (content-store! (nodes 0) keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM.json" (js/JSON.stringify (clj->js {:version "https://jsonfeed.org/version/1" :title "Testing" :items [1 2 3 "wingwang"]}))))))
+(defn content-store!
   "Store some content. Returns the hash. Asynchronous."
   [node keypair content-name content]
   (<json-rpc node keypair "torrent-seed" {:name content-name :content content}))
 
 ; get posts
+; (go (print (<! (refresh-account (nodes 0) keypair "7Q9he6fH1m6xAk5buSSPwK4Jjmute9FjF5TgidTZqiHM"))))
 (defn refresh-account [node keypair public-key-base58]
   (go
     (let [profile (<! (profile-fetch node keypair public-key-base58))
@@ -146,7 +147,8 @@
           {:profile profile-data :feed (if (feed :error) nil feed)})))))
 
 ; add post
-(defn add-post [node keypair post & [profile posts-feed]]
+; (go (print (<! (add-post! (nodes 0) keypair (make-post (random-hex 16) "Beep boop. Hello.")))))
+(defn add-post! [node keypair post & [profile posts-feed]]
   (go
     (let [public-key-b58 (public-key-b58-from-keypair keypair)
           profile (or profile (make-profile public-key-b58))
@@ -154,13 +156,13 @@
           posts-feed (update-in posts-feed ["items"] #(into [post] %))
           blob (js/JSON.stringify (clj->js posts-feed))
           ; {infohash ...}
-          updated-feed (<! (content-store node keypair (str public-key-b58 ".json") blob))
+          updated-feed (<! (content-store! node keypair (str public-key-b58 ".json") blob))
           infohash (updated-feed "infohash")]
       (if infohash
         (let [magnet-link (magnet-link infohash)
               profile (assoc profile "feed" magnet-link)
               ; {addresshash ... nodecount ...}
-              update-response (<! (profile-update node keypair profile))]
+              update-response (<! (profile-update! node keypair profile))]
           (if (update-response :error)
             update-response
             (if (and (> (update-response "nodecount") 0) (update-response "addresshash"))
