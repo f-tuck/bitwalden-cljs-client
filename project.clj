@@ -5,14 +5,14 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [org.clojure/clojurescript "1.9.908"]
+                 [org.clojure/clojurescript "1.9.854"]
                  [reagent "0.7.0"]
                  [cljs-ajax "0.7.2"]
                  [cljsjs/nacl-fast "1.0.0-rc.1-0"]
                  [mvxcvi/alphabase "0.2.2"]]
 
   :plugins [[lein-cljsbuild "1.1.5"]
-            [lein-figwheel "0.5.13"]]
+            [lein-figwheel "0.5.14"]]
 
   :min-lein-version "2.5.0"
 
