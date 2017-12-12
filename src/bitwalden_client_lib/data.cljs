@@ -9,16 +9,14 @@
    "bitwalden" {"public-key-base58" public-key-base58}
    "items" []})
 
-(defn make-post [id content]
+(defn make-post [id content & [content-format]]
   {"id" id
    "content_text" content
-   "content_format" "gfm"})
-
-(defn make-settings []
-  {"following" []})
+   "content_format" (or content-format "markdown")})
 
 (defn make-empty-account []
-  {"settings" (make-settings)
-   "feed" nil
-   "profile" nil
+  {"private" {"following" []}
+   "public" {"feed" nil "profile" nil}
+   "cache" {"known-good-nodes" [] "feeds" []}
    "keys" nil})
+

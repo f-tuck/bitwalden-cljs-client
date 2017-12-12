@@ -142,13 +142,15 @@
 (defn refresh-account [node keypair public-key-base58]
   (go
     (let [profile (<! (profile-fetch node keypair public-key-base58))
-          profile-data (if (profile "v") (into {} (doall (map (fn [[k v]] [k (if v (.toString v))]) (js->clj (bencode/bdecode (profile "v")))))))]
+          profile-data (if (and profile (get profile "v")) (into {} (doall (map (fn [[k v]] [k (if v (.toString v))]) (js->clj (bencode/bdecode (profile "v")))))))]
       ; TODO: verify stored sig in "s.dht" field
-      (if (not= (profile-data "pk") public-key-base58)
-        {:error true :message "Public key did not match." :code 400}
-        (let [feed-url (profile-data "feed")
-              feed (if feed-url (<! (content-get node keypair feed-url)))]
-          {:profile profile-data :feed (if (feed :error) nil feed)})))))
+      (if profile-data
+        (if (= (profile-data "pk") public-key-base58)
+          (let [feed-url (profile-data "feed-url")
+                feed (if feed-url (<! (content-get node keypair feed-url)))]
+            {:profile profile-data :feed (if (and feed (not (feed :error))) feed)})
+          {:error true :message "Public key did not match." :code 400})
+        {:error true :message "No profile data returned."}))))
 
 ; add post
 ; (go (print (<! (add-post! (nodes 0) keypair (make-post (random-hex 16) "Beep boop. Hello.")))))
@@ -164,7 +166,7 @@
           infohash (updated-feed "infohash")]
       (if infohash
         (let [magnet-link (magnet-link infohash)
-              profile (assoc profile "feed" magnet-link)
+              profile (assoc profile "feed-url" magnet-link)
               ; {addresshash ... nodecount ...}
               update-response (<! (profile-update! node keypair profile))]
           (if (update-response :error)
