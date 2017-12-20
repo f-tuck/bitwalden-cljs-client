@@ -9,10 +9,11 @@
    "bitwalden" {"public-key-base58" public-key-base58}
    "items" []})
 
-(defn make-post [id content & [content-format]]
+(defn make-post [id content & [date-published content-format]]
   {"id" id
    "content_text" content
-   "content_format" (or content-format "markdown")})
+   "content_format" (or content-format "markdown")
+   "date_published" (or date-published (.toISOString (js/Date.)))})
 
 (defn make-empty-account []
   {"private" {"following" []}
