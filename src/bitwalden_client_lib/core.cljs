@@ -127,7 +127,7 @@
     (let [actual-url (if (is-magnet-url url) (<! (content-fetch-magnet-url node keypair (magnet-get-infohash url))) url)
           [code response] (<! (<api :get actual-url))]
       (if (and (= code :ok) response)
-        {"content" response}
+        {:content response}
         {:error true :message (str "Problem downloading " url) :code 400 :error-response response}))))
 
 ; store content
@@ -148,7 +148,7 @@
         (if (= (profile-data "pk") public-key-base58)
           (let [feed-url (profile-data "feed-url")
                 feed (if feed-url (<! (content-get node keypair feed-url)))]
-            {:profile profile-data :feed (if (and feed (not (feed :error))) feed)})
+            {:profile profile-data :feed (if (and feed (not (feed :error)) (feed :content)) (feed :content))})
           {:error true :message "Public key did not match." :code 400})
         {:error true :message "No profile data returned."}))))
 
