@@ -25,6 +25,9 @@
 (defn public-key-b58-from-keypair [keypair]
   (b58/encode (.-publicKey keypair)))
 
+(defn private-key-b58-from-keypair [keypair]
+  (b58/encode (.-secretKey keypair)))
+
 (defn keypair-from-seed-phrase [seed-phrase]
   "Deterministic keypair from the first half of the hash of a phrase."
   (-> seed-phrase
@@ -39,6 +42,12 @@
       (b58/decode)
       (.slice 0 32)
       (nacl.sign.keyPair.fromSeed)))
+
+(defn keypair-from-private-key-b58 [private-key-b58]
+  (-> private-key-b58
+      (b58/decode)
+      (.slice 0 64)
+      (nacl.sign.keyPair.fromSecretKey)))
 
 (defn generate-keypair-seed-b58 []
   (b58/encode (nacl.randomBytes 32)))
