@@ -1,6 +1,7 @@
 (ns bitwalden-client-lib.util
   (:require  [alphabase.base58 :as b58])
-  (:import goog.crypt.Sha1))
+  (:import goog.crypt.Sha1
+           [goog.async Debouncer]))
 
 (defonce utf8encoder (js/TextEncoder. "utf8"))
 
@@ -45,4 +46,9 @@
 
 (defn random-hex [len]
   (hexenate (nacl.randomBytes len)))
+
+(defn debounce [f interval]
+  (let [dbnc (Debouncer. f interval)]
+    ;; We use apply here to support functions of various arities
+    (fn [& args] (.apply (.-fire dbnc) dbnc (to-array args)))))
 
