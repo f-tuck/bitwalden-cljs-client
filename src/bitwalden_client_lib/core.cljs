@@ -119,12 +119,17 @@
               (recur new-url)
               new-url))))))
 
+(defn content-get-http-url
+  "Convert a content URL or regular HTTP URL into an HTTP URL."
+  [node keypair url]
+  (go (if (is-magnet-url url) (<! (content-fetch-magnet-url node keypair (magnet-get-infohash url))) url)))
+
 ; (go (print (get-in (<! (content-get (get nodes 1) keypair "magnet:?xt=urn:btih:9071384156b7d415fa0a1a0dd2f08d0793022c9a")) ["content" "items"])))
 (defn content-get
   "Get remote content by URL."
   [node keypair url]
   (go
-    (let [actual-url (if (is-magnet-url url) (<! (content-fetch-magnet-url node keypair (magnet-get-infohash url))) url)
+    (let [actual-url (<! (content-get-http-url node keypair url))
           [code response] (<! (<api :get actual-url))]
       (if (and (= code :ok) response)
         {:content response}
