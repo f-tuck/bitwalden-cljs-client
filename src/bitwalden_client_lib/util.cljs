@@ -41,8 +41,11 @@
 
 ; --- utils --- ;
 
+(defn now []
+  (.getTime (js/Date.)))
+
 (defn with-timestamp [params]
-  (assoc params :t (.getTime (js/Date.))))
+  (assoc params :t (now)))
 
 (defn random-hex [len]
   (hexenate (nacl.randomBytes len)))
