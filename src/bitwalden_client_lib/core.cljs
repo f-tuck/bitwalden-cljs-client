@@ -4,7 +4,7 @@
     [bitwalden-client-lib.buffershim :as buffershim]
     ["dht-bencode/lib/bencode" :as bencode]
     [bitwalden-client-lib.crypto :refer [public-key-b58-from-keypair keypair-from-seed-b58 dht-compute-sig]]
-    [bitwalden-client-lib.util :refer [random-hex dht-address is-magnet-url magnet-get-infohash magnet-link]]
+    [bitwalden-client-lib.util :refer [random-hex dht-address is-magnet-url magnet-get-infohash magnet-link now]]
     [bitwalden-client-lib.rpc :refer [<api <json-rpc refresh-known-nodes]]
     [bitwalden-client-lib.data :refer [make-profile make-json-feed make-post]])
   (:require-macros
@@ -88,24 +88,29 @@
   (let [uid (random-hex 8)
         c (chan)]
     (go
-      (let [new-uid (<! (<json-rpc node keypair "torrent-fetch" {:infohash infohash :u uid}))]
+      (let [start (now)
+            new-uid (<! (<json-rpc node keypair "torrent-fetch" {:infohash infohash :u uid}))]
         (when new-uid
           (put! c {"uid" new-uid})
           (loop [after 0]
             (let [update (<! (<json-rpc node keypair "get-queue" {:u new-uid :after after}))
                   latest-timestamp (apply js/Math.max (map #(get % "timestamp") update))
                   files (some identity (doall (for [u update]
-                                                (do
-                                                  (put! c (assoc (u "payload") "uid" new-uid "timestamp" (u "timestamp")))
-                                                  (when (= (get-in u ["payload" "download"]) "done")
-                                                    (get-in u ["payload" "files"]))))))
+                                                (when (and (get u "payload") (get u "timestamp"))
+                                                  (do
+                                                    (put! c (assoc (u "payload") "uid" new-uid "timestamp" (u "timestamp")))
+                                                    (when (= (get-in u ["payload" "download"]) "done")
+                                                      (get-in u ["payload" "files"])))))))
                   done? (or (not update) files)]
               (if done?
                 (do
                   (when files
                     (put! c {"uid" new-uid "url" (str node "/bw/content/" infohash "/" (get-in files [0 "path"]))}))
                   (close! c))
-                (recur latest-timestamp)))))))
+                ; max five minutes for this to return
+                (if (> (+ start (* 5 * 60 * 1000)) (now))
+                  (recur latest-timestamp)
+                  (close! c))))))))
     c))
 
 (defn content-fetch-magnet-url
