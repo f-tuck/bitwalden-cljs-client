@@ -119,7 +119,7 @@
   (go (let [c (content-fetch-from-magnet node keypair infohash)]
         (loop [url nil]
           (let [r (<! c)
-                new-url (or url (r "url"))]
+                new-url (or url (get r "url"))]
             (if r
               (recur new-url)
               new-url))))))
